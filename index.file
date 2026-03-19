@@ -1,1 +1,135 @@
 
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>Mini NBA Game</title>
+<style>
+    body {
+        margin: 0;
+        background: #222;
+        color: white;
+        text-align: center;
+        font-family: Arial;
+    }
+    canvas {
+        background: #d68a2f;
+        display: block;
+        margin: 20px auto;
+        border: 3px solid white;
+    }
+</style>
+</head>
+<body>
+
+<h1>🏀 Mini NBA Game</h1>
+<p>← → ↑ ↓：移動　/　スペース：シュート</p>
+<p>スコア: <span id="score">0</span></p>
+
+<canvas id="gameCanvas" width="600" height="400"></canvas>
+
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+
+let player = { x: 100, y: 300, size: 20 };
+let ball = { x: player.x, y: player.y, vx: 0, vy: 0, shooting: false };
+let hoop = { x: 500, y: 150, width: 40, height: 10 };
+let score = 0;
+
+let keys = {};
+
+// キー入力
+document.addEventListener("keydown", e => {
+    keys[e.key] = true;
+
+    if (e.key === " " && !ball.shooting) {
+        ball.shooting = true;
+        ball.vx = 5;
+        ball.vy = -8;
+    }
+});
+
+document.addEventListener("keyup", e => {
+    keys[e.key] = false;
+});
+
+// 更新処理
+function update() {
+    // プレイヤー移動
+    if (keys["ArrowLeft"]) player.x -= 4;
+    if (keys["ArrowRight"]) player.x += 4;
+    if (keys["ArrowUp"]) player.y -= 4;
+    if (keys["ArrowDown"]) player.y += 4;
+
+    // ボール動き
+    if (ball.shooting) {
+        ball.x += ball.vx;
+        ball.y += ball.vy;
+        ball.vy += 0.3; // 重力
+
+        // ゴール判定
+        if (
+            ball.x > hoop.x &&
+            ball.x < hoop.x + hoop.width &&
+            ball.y > hoop.y &&
+            ball.y < hoop.y + hoop.height
+        ) {
+            score++;
+            document.getElementById("score").textContent = score;
+            resetBall();
+        }
+
+        // 外したらリセット
+        if (ball.y > canvas.height) {
+            resetBall();
+        }
+    } else {
+        ball.x = player.x;
+        ball.y = player.y;
+    }
+}
+
+// ボールリセット
+function resetBall() {
+    ball.shooting = false;
+    ball.x = player.x;
+    ball.y = player.y;
+}
+
+// 描画
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // プレイヤー
+    ctx.fillStyle = "blue";
+    ctx.fillRect(player.x, player.y, player.size, player.size);
+
+    // ボール
+    ctx.fillStyle = "orange";
+    ctx.beginPath();
+    ctx.arc(ball.x, ball.y, 8, 0, Math.PI * 2);
+    ctx.fill();
+
+    // ゴール
+    ctx.fillStyle = "red";
+    ctx.fillRect(hoop.x, hoop.y, hoop.width, hoop.height);
+
+    ctx.strokeStyle = "white";
+    ctx.beginPath();
+    ctx.arc(hoop.x + 20, hoop.y + 5, 15, 0, Math.PI);
+    ctx.stroke();
+}
+
+// ループ
+function gameLoop() {
+    update();
+    draw();
+    requestAnimationFrame(gameLoop);
+}
+
+gameLoop();
+</script>
+
+</body>
+</html>
