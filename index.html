@@ -125,15 +125,33 @@ function update() {
     if (keys["f"]) shoot(p1, 1);
     if (keys["l"]) shoot(p2, -1);
 
-    // ボール追従 or 物理
-    if (ball.holder) {
-        ball.x = ball.holder.x + ball.holder.width/2;
-        ball.y = ball.holder.y;
-    } else {
-        ball.vy += gravity;
-        ball.x += ball.vx;
-        ball.y += ball.vy;
+    
+// ボール追従 or 物理
+if (ball.holder) {
+    ball.x = ball.holder.x + ball.holder.width/2;
+    ball.y = ball.holder.y;
+} else {
+    ball.vy += gravity;
+    ball.x += ball.vx;
+    ball.y += ball.vy;
+
+    // ★地面との衝突（バウンド）
+    if (ball.y + ball.radius > 350) {
+        ball.y = 350 - ball.radius;
+        ball.vy *= -0.7; // 跳ね返り（小さくすると弱くなる）
+        ball.vx *= 0.9;  // 摩擦（横の減速）
     }
+
+    // ★左右の壁
+    if (ball.x - ball.radius < 0) {
+        ball.x = ball.radius;
+        ball.vx *= -0.7;
+    }
+    if (ball.x + ball.radius > 800) {
+        ball.x = 800 - ball.radius;
+        ball.vx *= -0.7;
+    }
+}
 
     // 得点判定
     if (ball.x < hoopLeft.x + 20 && ball.y < hoopLeft.y + 20) {
