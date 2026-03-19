@@ -2,28 +2,33 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>2D Basketball Battle</title>
+<title>2D Basketball Battle+</title>
 <style>
 body {
     margin: 0;
     background: #222;
     color: white;
     text-align: center;
-    font-family: sans-serif;
 }
 canvas {
-    background: linear-gradient(#87ceeb, #d68a2f);
     display: block;
     margin: 10px auto;
+    background: linear-gradient(#87ceeb, #d68a2f);
     border: 3px solid white;
 }
 </style>
 </head>
 <body>
 
-<h2>🏀 2Dバスケ対戦ゲーム</h2>
-<p>P1: A/D移動 Wジャンプ Fシュート | P2: ←/→移動 ↑ジャンプ Lシュート</p>
-<p>スコア：P1 <span id="s1">0</span> - P2 <span id="s2">0</span></p>
+<h2>🏀 強化版バスケ対戦</h2>
+<p>
+P1: A/D移動 Wジャンプ F長押しシュート Shiftダッシュ<br>
+P2: ←/→移動 ↑ジャンプ L長押しシュート /ダッシュ
+</p>
+<p>
+P1ゲージ <span id="g1">100</span> |
+P2ゲージ <span id="g2">100</span>
+</p>
 
 <canvas id="game" width="800" height="400"></canvas>
 
@@ -36,177 +41,198 @@ let gravity = 0.5;
 // プレイヤー
 function createPlayer(x, color) {
     return {
-        x: x,
-        y: 300,
-        vx: 0,
-        vy: 0,
-        width: 30,
-        height: 50,
-        color: color,
-        onGround: false
+        x, y:300, vx:0, vy:0,
+        width:30, height:50,
+        color,
+        onGround:false,
+        dash:100,
+        charging:false,
+        power:0
     };
 }
 
-let p1 = createPlayer(100, "blue");
-let p2 = createPlayer(650, "green");
+let p1 = createPlayer(100,"blue");
+let p2 = createPlayer(650,"green");
+
+// 足場
+let platforms = [
+    {x:250, y:260, w:100, h:10},
+    {x:450, y:200, w:100, h:10}
+];
 
 // ボール
-let ball = {
-    x: 400,
-    y: 200,
-    vx: 0,
-    vy: 0,
-    radius: 10,
-    holder: null
-};
+let ball = {x:400,y:200,vx:0,vy:0,r:10,holder:null};
 
 // ゴール
-let hoopLeft = { x: 20, y: 150 };
-let hoopRight = { x: 740, y: 150 };
-
-let score1 = 0;
-let score2 = 0;
+let hoopLeft = {x:20,y:150};
+let hoopRight = {x:740,y:150};
 
 let keys = {};
+document.addEventListener("keydown", e=>keys[e.key]=true);
+document.addEventListener("keyup", e=>keys[e.key]=false);
 
-// 入力
-document.addEventListener("keydown", e => keys[e.key] = true);
-document.addEventListener("keyup", e => keys[e.key] = false);
+// プレイヤー更新
+function updatePlayer(p,left,right,jump,dashKey,shootKey,dir){
+    let speed = 3;
 
-// 更新
-function updatePlayer(p, left, right, jump) {
-    if (keys[left]) p.vx = -3;
-    else if (keys[right]) p.vx = 3;
+    // ダッシュ
+    if(keys[dashKey] && p.dash > 0){
+        speed = 6;
+        p.dash -= 1;
+    } else {
+        p.dash += 0.5;
+        if(p.dash > 100) p.dash = 100;
+    }
+
+    if(keys[left]) p.vx = -speed;
+    else if(keys[right]) p.vx = speed;
     else p.vx = 0;
 
-    if (keys[jump] && p.onGround) {
+    if(keys[jump] && p.onGround){
         p.vy = -10;
         p.onGround = false;
+    }
+
+    // シュート溜め
+    if(keys[shootKey] && ball.holder===p){
+        p.charging = true;
+        p.power += 0.3;
+        if(p.power > 10) p.power = 10;
+    } else if(p.charging){
+        shoot(p,dir);
+        p.charging = false;
+        p.power = 0;
     }
 
     p.vy += gravity;
     p.x += p.vx;
     p.y += p.vy;
 
-    if (p.y > 300) {
+    p.onGround = false;
+
+    // 地面
+    if(p.y > 300){
         p.y = 300;
         p.vy = 0;
         p.onGround = true;
     }
+
+    // 足場
+    platforms.forEach(pl=>{
+        if(
+            p.x + p.width > pl.x &&
+            p.x < pl.x + pl.w &&
+            p.y + p.height > pl.y &&
+            p.y + p.height < pl.y + 15 &&
+            p.vy >= 0
+        ){
+            p.y = pl.y - p.height;
+            p.vy = 0;
+            p.onGround = true;
+        }
+    });
 }
 
-// ボール保持
-function checkBallPickup(p) {
-    let dx = ball.x - (p.x + p.width/2);
-    let dy = ball.y - (p.y + p.height/2);
-    if (Math.sqrt(dx*dx + dy*dy) < 30 && ball.holder === null) {
+// ボール取得
+function pickup(p){
+    let dx = ball.x - (p.x+p.width/2);
+    let dy = ball.y - (p.y+p.height/2);
+    if(Math.sqrt(dx*dx+dy*dy)<30 && !ball.holder){
         ball.holder = p;
     }
 }
 
 // シュート
-function shoot(p, dir) {
-    if (ball.holder === p) {
-        ball.holder = null;
-        ball.vx = dir * 6;
-        ball.vy = -8;
-    }
+function shoot(p,dir){
+    ball.holder=null;
+    let angle = Math.PI/4 + (p.power/10)*(Math.PI/4); // 最大90度
+    ball.vx = dir * Math.cos(angle) * p.power;
+    ball.vy = -Math.sin(angle) * p.power;
 }
 
 // 更新
-function update() {
-    updatePlayer(p1, "a", "d", "w");
-    updatePlayer(p2, "ArrowLeft", "ArrowRight", "ArrowUp");
+function update(){
+    updatePlayer(p1,"a","d","w","Shift","f",1);
+    updatePlayer(p2,"ArrowLeft","ArrowRight","ArrowUp","/","l",-1);
 
-    checkBallPickup(p1);
-    checkBallPickup(p2);
+    pickup(p1);
+    pickup(p2);
 
-    if (keys["f"]) shoot(p1, 1);
-    if (keys["l"]) shoot(p2, -1);
+    // ボール
+    if(ball.holder){
+        ball.x = ball.holder.x + ball.holder.width/2;
+        ball.y = ball.holder.y;
+    } else {
+        ball.vy += gravity;
+        ball.x += ball.vx;
+        ball.y += ball.vy;
 
-// ボール追従 or 物理
-if (ball.holder) {
-    ball.x = ball.holder.x + ball.holder.width/2;
-    ball.y = ball.holder.y;
-} else {
-    ball.vy += gravity;
-    ball.x += ball.vx;
-    ball.y += ball.vy;
+        // 地面バウンド
+        if(ball.y + ball.r > 350){
+            ball.y = 350 - ball.r;
+            ball.vy *= -0.7;
+            ball.vx *= 0.9;
+        }
 
-    // ★地面との衝突（バウンド）
-    if (ball.y + ball.radius > 350) {
-        ball.y = 350 - ball.radius;
-        ball.vy *= -0.7; // 跳ね返り（小さくすると弱くなる）
-        ball.vx *= 0.9;  // 摩擦（横の減速）
+        // 壁
+        if(ball.x-ball.r<0 || ball.x+ball.r>800){
+            ball.vx *= -0.7;
+        }
     }
 
-    // ★左右の壁
-    if (ball.x - ball.radius < 0) {
-        ball.x = ball.radius;
-        ball.vx *= -0.7;
-    }
-    if (ball.x + ball.radius > 800) {
-        ball.x = 800 - ball.radius;
-        ball.vx *= -0.7;
-    }
+    // ゴール
+    if(ball.x<40 && ball.y<170){ reset(2); }
+    if(ball.x>740 && ball.y<170){ reset(1); }
+
+    document.getElementById("g1").textContent = Math.floor(p1.dash);
+    document.getElementById("g2").textContent = Math.floor(p2.dash);
 }
 
-    // 得点判定
-    if (ball.x < hoopLeft.x + 20 && ball.y < hoopLeft.y + 20) {
-        score2++;
-        reset();
-    }
-    if (ball.x > hoopRight.x && ball.y < hoopRight.y + 20) {
-        score1++;
-        reset();
-    }
-}
-
-// リセット
-function reset() {
-    ball.x = 400;
-    ball.y = 200;
-    ball.vx = 0;
-    ball.vy = 0;
-    ball.holder = null;
-    document.getElementById("s1").textContent = score1;
-    document.getElementById("s2").textContent = score2;
+function reset(scored){
+    ball.x=400; ball.y=200;
+    ball.vx=ball.vy=0;
+    ball.holder=null;
 }
 
 // 描画
-function draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+function draw(){
+    ctx.clearRect(0,0,800,400);
 
     // 地面
-    ctx.fillStyle = "#654321";
-    ctx.fillRect(0, 350, 800, 50);
+    ctx.fillStyle="#654321";
+    ctx.fillRect(0,350,800,50);
+
+    // 足場
+    ctx.fillStyle="#888";
+    platforms.forEach(pl=>{
+        ctx.fillRect(pl.x,pl.y,pl.w,pl.h);
+    });
 
     // ゴール
-    ctx.fillStyle = "red";
-    ctx.fillRect(hoopLeft.x, hoopLeft.y, 20, 5);
-    ctx.fillRect(hoopRight.x, hoopRight.y, 20, 5);
+    ctx.fillStyle="red";
+    ctx.fillRect(20,150,20,5);
+    ctx.fillRect(740,150,20,5);
 
     // プレイヤー
-    ctx.fillStyle = p1.color;
-    ctx.fillRect(p1.x, p1.y, p1.width, p1.height);
+    ctx.fillStyle=p1.color;
+    ctx.fillRect(p1.x,p1.y,p1.width,p1.height);
 
-    ctx.fillStyle = p2.color;
-    ctx.fillRect(p2.x, p2.y, p2.width, p2.height);
+    ctx.fillStyle=p2.color;
+    ctx.fillRect(p2.x,p2.y,p2.width,p2.height);
 
     // ボール
-    ctx.fillStyle = "orange";
+    ctx.fillStyle="orange";
     ctx.beginPath();
-    ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI*2);
+    ctx.arc(ball.x,ball.y,ball.r,0,Math.PI*2);
     ctx.fill();
 }
 
 // ループ
-function loop() {
+function loop(){
     update();
     draw();
     requestAnimationFrame(loop);
 }
-
 loop();
 </script>
 
